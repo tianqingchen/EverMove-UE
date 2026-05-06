@@ -1,0 +1,18 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "1.0",
+  "FriendlyName": "Soma Voice",
+  "Description": "Text-to-speech with OpenAI/ElevenLabs and OVR Lip Sync viseme output.",
+  "Category": "Audio",
+  "CreatedBy": "",
+  "EnabledByDefault": false,
+  "CanContainContent": false,
+  "Modules": [
+    {
+      "Name": "soma_voice",
+      "Type": "Runtime",
+      "LoadingPhase": "Default"
+    }
+  ]
+}
