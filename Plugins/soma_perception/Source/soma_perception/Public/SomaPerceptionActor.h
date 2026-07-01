@@ -91,6 +91,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Soma Perception|OpenAI", meta = (ClampMin = "1.0", ClampMax = "120.0", EditCondition = "bEnableOpenAiVision"))
 	float OpenAiTimeoutSeconds = 30.0f;
 
+	// ── Gaze ────────────────────────────────────────────────────────
+
+	/** When true, periodically collects USomaGazeTargetComponent positions and pushes them to storage. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Soma Perception|Gaze")
+	bool bEnableGaze = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Soma Perception|Gaze", meta = (ClampMin = "0.1", EditCondition = "bEnableGaze"))
+	float GazeIntervalSeconds = 2.0f;
+
 	// ── ASR (Whisper) ───────────────────────────────────────────────
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Soma Perception|ASR")
@@ -194,6 +203,9 @@ private:
 	void OpenAiTick();
 	void OnOpenAiResponse(TArray<FSomaPerceptionDetection> Detections, FSomaPerceptionSceneSummary SceneSummary, float Latency, bool bSuccess);
 
+	// ── Gaze internals ──────────────────────────────────────────────
+	void GazeTick();
+
 	// ── Audio internals ─────────────────────────────────────────────
 	int32 ResolveCaptureDeviceIndex() const;
 	static void AppendPcmWavHeader(TArray<uint8>& WavData, int32 SampleRate, int32 NumChannels, int32 DataSizeBytes);
@@ -206,6 +218,7 @@ private:
 
 	FTimerHandle TimerHandle;
 	FTimerHandle OpenAiTimerHandle;
+	FTimerHandle GazeTimerHandle;
 
 	bool bDetectionActive = false;
 	bool bOpenAiRequestInFlight = false;
@@ -223,7 +236,7 @@ private:
 	FDelegateHandle DebugDrawHandle;
 
 	// Audio capture state.
-	Audio::FAudioCapture AudioCapture;
+	TUniquePtr<Audio::FAudioCapture> AudioCapture;
 	FCriticalSection CaptureBufferMutex;
 	TArray<float> CaptureBuffer;
 	bool bIsListening = false;

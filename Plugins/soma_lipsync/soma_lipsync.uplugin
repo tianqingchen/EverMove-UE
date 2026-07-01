@@ -1,0 +1,29 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "1.0",
+  "FriendlyName": "Soma Lipsync",
+  "Description": "Custom motion-matching lip sync that consumes soma_voice viseme frames and drives a 4-bone mouth rig via AnimBP.",
+  "Category": "Animation",
+  "CreatedBy": "",
+  "EnabledByDefault": false,
+  "CanContainContent": true,
+  "Modules": [
+    {
+      "Name": "soma_lipsync",
+      "Type": "Runtime",
+      "LoadingPhase": "Default"
+    },
+    {
+      "Name": "soma_lipsyncEditor",
+      "Type": "UncookedOnly",
+      "LoadingPhase": "Default"
+    }
+  ],
+  "Plugins": [
+    {
+      "Name": "soma_voice",
+      "Enabled": true
+    }
+  ]
+}

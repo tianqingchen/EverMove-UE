@@ -12,10 +12,14 @@
     {
       "Name": "soma_perception",
       "Type": "Runtime",
-      "LoadingPhase": "Default"
+      "LoadingPhase": "PostDefault"
     }
   ],
   "Plugins": [
+    {
+      "Name": "AudioCapture",
+      "Enabled": true
+    },
     {
       "Name": "soma_storage",
       "Enabled": true

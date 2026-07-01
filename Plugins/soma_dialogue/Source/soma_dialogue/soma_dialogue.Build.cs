@@ -13,7 +13,8 @@ public class soma_dialogue : ModuleRules
 			"Engine",
 			"HTTP",
 			"Json",
-			"JsonUtilities"
+			"JsonUtilities",
+			"soma_storage"
 		});
 	}
 }

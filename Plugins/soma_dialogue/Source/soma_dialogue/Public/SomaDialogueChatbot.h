@@ -4,6 +4,7 @@
 #include "GameFramework/Actor.h"
 #include "Http.h"
 #include "SomaDialogueTypes.h"
+#include "SomaStorageTypes.h"
 #include "SomaDialogueChatbot.generated.h"
 
 DECLARE_LOG_CATEGORY_EXTERN(LogSomaDialogue, Log, All);
@@ -43,6 +44,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SomaDialogue|Config", meta = (MultiLine = true))
 	FString SystemPrompt = TEXT("You are a helpful assistant in a video game. Keep answers short and conversational.");
 
+	/** When true, uses BuildStructuredSystemPrompt() from SomaStorageSubsystem and enforces JSON output. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SomaDialogue|Config")
+	bool bUseStructuredPrompt = false;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SomaDialogue|Config")
 	int32 MaxHistoryTurns = 10;
 
@@ -73,6 +78,13 @@ public:
 
 	UPROPERTY(BlueprintAssignable, Category = "SomaDialogue|Events")
 	FSomaDialogueOnDialogueGenerated OnDialogueGenerated;
+
+	UPROPERTY(BlueprintAssignable, Category = "SomaDialogue|Events")
+	FSomaDialogueOnStructuredDialogue OnStructuredDialogueGenerated;
+
+	/** Fires when a structured response selects a gaze object; position is resolved from the live gaze registry. */
+	UPROPERTY(BlueprintAssignable, Category = "SomaDialogue|Events")
+	FSomaDialogueOnGazeTarget OnGazeTargetSelected;
 
 	UPROPERTY(BlueprintAssignable, Category = "SomaDialogue|Events")
 	FSomaDialogueOnValidationComplete OnValidationComplete;

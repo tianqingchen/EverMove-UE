@@ -6,6 +6,7 @@
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 #include "Dom/JsonObject.h"
+#include "SomaStorageSubsystem.h"
 
 DEFINE_LOG_CATEGORY(LogSomaDialogue);
 
@@ -72,12 +73,6 @@ void ASomaDialogueChatbot::RequestDialogue(const FString& UserText)
 		ActiveChatRequest.Reset();
 	}
 
-	FSomaDialogueMessage UserMsg;
-	UserMsg.Role = ESomaDialogueRole::User;
-	UserMsg.Content = Trimmed;
-	ConversationHistory.Add(UserMsg);
-	TrimConversationHistory();
-
 	OnStatusMessage.Broadcast(TEXT("Thinking..."));
 
 	FHttpModule& Http = FHttpModule::Get();
@@ -94,17 +89,59 @@ void ASomaDialogueChatbot::RequestDialogue(const FString& UserText)
 
 	TArray<TSharedPtr<FJsonValue>> Messages;
 
-	TSharedPtr<FJsonObject> SystemMsg = MakeShareable(new FJsonObject());
-	SystemMsg->SetStringField(TEXT("role"), TEXT("system"));
-	SystemMsg->SetStringField(TEXT("content"), SystemPrompt);
-	Messages.Add(MakeShareable(new FJsonValueObject(SystemMsg)));
-
-	for (const FSomaDialogueMessage& Msg : ConversationHistory)
+	if (bUseStructuredPrompt)
 	{
-		TSharedPtr<FJsonObject> JsonMsg = MakeShareable(new FJsonObject());
-		JsonMsg->SetStringField(TEXT("role"), SomaDialogueChatbotPrivate::RoleToOpenAIRole(Msg.Role));
-		JsonMsg->SetStringField(TEXT("content"), Msg.Content);
-		Messages.Add(MakeShareable(new FJsonValueObject(JsonMsg)));
+		USomaStorageSubsystem* Storage = nullptr;
+		if (const UGameInstance* GI = GetGameInstance())
+		{
+			Storage = GI->GetSubsystem<USomaStorageSubsystem>();
+		}
+
+		FString StructuredSystemPrompt;
+		if (Storage)
+		{
+			StructuredSystemPrompt = Storage->BuildStructuredSystemPrompt();
+		}
+		else
+		{
+			UE_LOG(LogSomaDialogue, Warning, TEXT("bUseStructuredPrompt is true but SomaStorageSubsystem is unavailable. Falling back to flat prompt."));
+			StructuredSystemPrompt = SystemPrompt;
+		}
+
+		TSharedPtr<FJsonObject> SystemMsg = MakeShareable(new FJsonObject());
+		SystemMsg->SetStringField(TEXT("role"), TEXT("system"));
+		SystemMsg->SetStringField(TEXT("content"), StructuredSystemPrompt);
+		Messages.Add(MakeShareable(new FJsonValueObject(SystemMsg)));
+
+		TSharedPtr<FJsonObject> UserMsg = MakeShareable(new FJsonObject());
+		UserMsg->SetStringField(TEXT("role"), TEXT("user"));
+		UserMsg->SetStringField(TEXT("content"), Trimmed);
+		Messages.Add(MakeShareable(new FJsonValueObject(UserMsg)));
+
+		TSharedPtr<FJsonObject> ResponseFormat = MakeShareable(new FJsonObject());
+		ResponseFormat->SetStringField(TEXT("type"), TEXT("json_object"));
+		Root->SetObjectField(TEXT("response_format"), ResponseFormat);
+	}
+	else
+	{
+		FSomaDialogueMessage UserMsg;
+		UserMsg.Role = ESomaDialogueRole::User;
+		UserMsg.Content = Trimmed;
+		ConversationHistory.Add(UserMsg);
+		TrimConversationHistory();
+
+		TSharedPtr<FJsonObject> SystemMsg = MakeShareable(new FJsonObject());
+		SystemMsg->SetStringField(TEXT("role"), TEXT("system"));
+		SystemMsg->SetStringField(TEXT("content"), SystemPrompt);
+		Messages.Add(MakeShareable(new FJsonValueObject(SystemMsg)));
+
+		for (const FSomaDialogueMessage& Msg : ConversationHistory)
+		{
+			TSharedPtr<FJsonObject> JsonMsg = MakeShareable(new FJsonObject());
+			JsonMsg->SetStringField(TEXT("role"), SomaDialogueChatbotPrivate::RoleToOpenAIRole(Msg.Role));
+			JsonMsg->SetStringField(TEXT("content"), Msg.Content);
+			Messages.Add(MakeShareable(new FJsonValueObject(JsonMsg)));
+		}
 	}
 
 	Root->SetArrayField(TEXT("messages"), Messages);
@@ -220,13 +257,41 @@ void ASomaDialogueChatbot::OnChatCompletionsResponse(FHttpRequestPtr Request, FH
 
 	const FString Content = Message->GetStringField(TEXT("content"));
 
-	FSomaDialogueMessage AssistantMsg;
-	AssistantMsg.Role = ESomaDialogueRole::Assistant;
-	AssistantMsg.Content = Content;
-	ConversationHistory.Add(AssistantMsg);
-	TrimConversationHistory();
+	if (bUseStructuredPrompt)
+	{
+		FSomaStructuredResponse Parsed = USomaStorageSubsystem::ParseStructuredResponse(Content);
 
-	OnDialogueGenerated.Broadcast(Content);
+		UE_LOG(LogSomaDialogue, Log, TEXT("Structured reasoning: %s"), *Parsed.Reasoning);
+
+		OnDialogueGenerated.Broadcast(Parsed.Dialogue);
+		OnStructuredDialogueGenerated.Broadcast(Parsed.Dialogue, Parsed.ActionTag, Parsed.ActionEvent);
+
+		if (const UGameInstance* GI = GetGameInstance())
+		{
+			if (USomaStorageSubsystem* Storage = GI->GetSubsystem<USomaStorageSubsystem>())
+			{
+				if (Parsed.bHasGazeTarget)
+				{
+					// Resolve the authoritative world position engine-side; the LLM only returns a name.
+					Storage->ResolveGazePosition(Parsed.GazeObject, Parsed.GazePosition);
+					OnGazeTargetSelected.Broadcast(Parsed.GazeObject, Parsed.GazePosition);
+				}
+
+				Storage->AppendDynamicEntry(Content, TEXT("AssistantDialogue"));
+			}
+		}
+	}
+	else
+	{
+		FSomaDialogueMessage AssistantMsg;
+		AssistantMsg.Role = ESomaDialogueRole::Assistant;
+		AssistantMsg.Content = Content;
+		ConversationHistory.Add(AssistantMsg);
+		TrimConversationHistory();
+
+		OnDialogueGenerated.Broadcast(Content);
+	}
+
 	OnStatusMessage.Broadcast(TEXT("Dialogue ready."));
 }
 

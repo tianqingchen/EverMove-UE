@@ -1,0 +1,28 @@
+# Unreal generated build output
+Binaries/
+Intermediate/
+DerivedDataCache/
+Saved/
+
+# Plugin generated build output
+Plugins/*/Binaries/
+Plugins/*/Intermediate/
+
+# Third-party binaries (headers/licenses are tracked; large binaries are not)
+*.dll
+*.dylib
+*.so
+*.a
+*.lib
+*.pdb
+*.exp
+*.obj
+*.onnx
+
+# IDE / OS
+.vs/
+*.VC.db
+*.suo
+*.user
+.DS_Store
+Thumbs.db

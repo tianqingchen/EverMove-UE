@@ -25,6 +25,8 @@ struct FSomaDialogueMessage
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FSomaDialogueOnDialogueGenerated, const FString&, Text);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FSomaDialogueOnStructuredDialogue, const FString&, Dialogue, const FString&, ActionTag, const FString&, ActionEvent);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FSomaDialogueOnGazeTarget, const FString&, GazeObject, FVector, GazePosition);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FSomaDialogueOnValidationComplete, bool, bSuccess, const FString&, Message);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FSomaDialogueOnStatusMessage, const FString&, Status);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FSomaDialogueOnError, const FString&, Error);

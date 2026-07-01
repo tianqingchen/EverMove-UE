@@ -14,5 +14,11 @@
       "Type": "Runtime",
       "LoadingPhase": "Default"
     }
+  ],
+  "Plugins": [
+    {
+      "Name": "soma_storage",
+      "Enabled": true
+    }
   ]
 }

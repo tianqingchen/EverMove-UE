@@ -92,8 +92,6 @@ YoloInference::YoloInference()
 {
 	// ONNX Runtime global API entrypoint.
 	const OrtApiBase* ApiBase = OrtGetApiBase();
-	const char* RuntimeVersionC = ApiBase ? ApiBase->GetVersionString() : nullptr;
-	int32 ResolvedApiVersion = ORT_API_VERSION;
 	OrtApi = ApiBase ? ApiBase->GetApi(ORT_API_VERSION) : nullptr;
 
 	// Some packaged runtimes may be older than our headers. Fall back to the
@@ -105,7 +103,6 @@ YoloInference::YoloInference()
 			OrtApi = ApiBase->GetApi((uint32_t)ApiVersion);
 			if (OrtApi)
 			{
-				ResolvedApiVersion = ApiVersion;
 				break;
 			}
 		}
@@ -146,10 +143,15 @@ bool YoloInference::LoadModel(const FString& OnnxPath)
 	// CPU memory info (for CreateTensorWithDataAsOrtValue).
 	OrtApi->CreateCpuMemoryInfo(OrtArenaAllocator, OrtMemTypeDefault, &CpuMemoryInfo);
 
-	// Create session from model file.
-	// On Windows, ORTCHAR_T is wchar_t, which matches UE's TCHAR on Windows builds.
+	// Create session from model file. ORTCHAR_T is wchar_t on Windows and char
+	// on macOS/Linux, while Unreal's TCHAR is platform-specific.
+#if PLATFORM_WINDOWS
 	const ORTCHAR_T* ModelPathPtr = reinterpret_cast<const ORTCHAR_T*>(*OnnxPath);
 	Status = OrtApi->CreateSession(OrtEnv, ModelPathPtr, OrtSessionOptions, &OrtSession);
+#else
+	const FTCHARToUTF8 ModelPathUtf8(*OnnxPath);
+	Status = OrtApi->CreateSession(OrtEnv, ModelPathUtf8.Get(), OrtSessionOptions, &OrtSession);
+#endif
 	if (Status != nullptr || OrtSession == nullptr)
 	{
 		return false;
@@ -687,4 +689,3 @@ const TArray<FString>& YoloInference::GetCocoClassNames()
 {
 	return G_CocoClassNames;
 }
-

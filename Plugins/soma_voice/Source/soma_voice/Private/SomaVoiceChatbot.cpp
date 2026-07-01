@@ -648,3 +648,68 @@ void ASomaVoiceChatbot::StopVisemeTick()
 	}
 	CurrentVisemeIdx = 0;
 }
+
+// ---------------------------------------------------------------------------
+// Trajectory-matching accessor: look up the viseme entry containing a given
+// world-time, plus its successor, so callers can lerp viseme targets without
+// having to re-search the timeline themselves.
+// ---------------------------------------------------------------------------
+
+bool ASomaVoiceChatbot::GetVisemeAtWorldTime(float WorldTimeSeconds,
+	int32& OutVisemeIndex,
+	float& OutMidpointSeconds,
+	int32& OutNextVisemeIndex,
+	float& OutNextMidpointSeconds) const
+{
+	OutVisemeIndex = 0;
+	OutMidpointSeconds = WorldTimeSeconds;
+	OutNextVisemeIndex = 0;
+	OutNextMidpointSeconds = WorldTimeSeconds;
+
+	const int32 Num = VisemeTimeline.Num();
+	if (Num == 0)
+	{
+		return false;
+	}
+
+	const float PlaybackT = WorldTimeSeconds - PlaybackStartTime;
+	if (PlaybackT < VisemeTimeline[0].StartTime || PlaybackT > VisemeTimeline[Num - 1].EndTime)
+	{
+		return false;
+	}
+
+	// Binary search for the first entry whose EndTime > PlaybackT; that entry
+	// is the one containing PlaybackT (since entries are non-overlapping and
+	// sorted by StartTime in BuildVisemeTimeline).
+	int32 Lo = 0;
+	int32 Hi = Num;
+	while (Lo < Hi)
+	{
+		const int32 Mid = (Lo + Hi) / 2;
+		if (VisemeTimeline[Mid].EndTime <= PlaybackT)
+		{
+			Lo = Mid + 1;
+		}
+		else
+		{
+			Hi = Mid;
+		}
+	}
+	int32 Idx = Lo;
+	if (Idx >= Num)
+	{
+		// Exactly at the trailing boundary -- snap to last entry.
+		Idx = Num - 1;
+	}
+
+	const FSomaVisemeEntry& Curr = VisemeTimeline[Idx];
+	OutVisemeIndex = Curr.VisemeIndex;
+	OutMidpointSeconds = PlaybackStartTime + 0.5f * (Curr.StartTime + Curr.EndTime);
+
+	const int32 NextIdx = FMath::Min(Idx + 1, Num - 1);
+	const FSomaVisemeEntry& Next = VisemeTimeline[NextIdx];
+	OutNextVisemeIndex = Next.VisemeIndex;
+	OutNextMidpointSeconds = PlaybackStartTime + 0.5f * (Next.StartTime + Next.EndTime);
+
+	return true;
+}

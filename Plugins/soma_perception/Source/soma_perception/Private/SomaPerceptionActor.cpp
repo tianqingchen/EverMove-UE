@@ -21,7 +21,9 @@
 
 #include "YoloInference.h"
 #include "OpenAiVisionClient.h"
+#include "SomaGazeTargetComponent.h"
 #include "SomaStorageSubsystem.h"
+#include "TimerManager.h"
 
 DEFINE_LOG_CATEGORY(LogSomaPerception);
 
@@ -54,14 +56,32 @@ void ASomaPerceptionActor::BeginPlay()
 	{
 		ValidateAPIKey(APIKey);
 	}
+
+	if (bEnableGaze && GazeIntervalSeconds > 0.0f && GetWorld())
+	{
+		GetWorld()->GetTimerManager().SetTimer(
+			GazeTimerHandle,
+			this,
+			&ASomaPerceptionActor::GazeTick,
+			GazeIntervalSeconds,
+			true);
+
+		// Push an initial snapshot immediately so storage is populated before the first interval elapses.
+		GazeTick();
+
+		UE_LOG(LogSomaPerception, Log, TEXT("Soma gaze collection enabled – interval %.1fs"), GazeIntervalSeconds);
+	}
 }
 
 void ASomaPerceptionActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	if (bIsListening)
 	{
-		AudioCapture.StopStream();
-		AudioCapture.CloseStream();
+		if (AudioCapture)
+		{
+			AudioCapture->StopStream();
+			AudioCapture->CloseStream();
+		}
 		bIsListening = false;
 		OnListeningStopped.Broadcast();
 		{
@@ -72,6 +92,11 @@ void ASomaPerceptionActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 	CancelInFlight();
 	StopDetection();
+
+	if (GetWorld())
+	{
+		GetWorld()->GetTimerManager().ClearTimer(GazeTimerHandle);
+	}
 
 	if (DebugDrawHandle.IsValid())
 	{
@@ -294,6 +319,38 @@ void ASomaPerceptionActor::OnOpenAiResponse(
 	OnOpenAiComplete.Broadcast(LastOpenAiDetections, LastOpenAiSceneSummary, Latency, bSuccess);
 }
 
+// ── Gaze ─────────────────────────────────────────────────────────
+
+void ASomaPerceptionActor::GazeTick()
+{
+	USomaStorageSubsystem* Storage = ResolveStorageSubsystem();
+	if (!Storage)
+	{
+		return;
+	}
+
+	TArray<USomaGazeTargetComponent*> Targets;
+	USomaGazeTargetComponent::GetGazeTargetsForWorld(GetWorld(), Targets);
+
+	TArray<FSomaGazeCandidate> Candidates;
+	Candidates.Reserve(Targets.Num());
+	for (const USomaGazeTargetComponent* Target : Targets)
+	{
+		if (!Target || Target->GazeObjectName.IsEmpty())
+		{
+			continue;
+		}
+
+		FSomaGazeCandidate Candidate;
+		Candidate.Name = Target->GazeObjectName;
+		Candidate.Position = Target->GetGazeWorldPosition();
+		Candidate.Description = Target->Description;
+		Candidates.Add(MoveTemp(Candidate));
+	}
+
+	Storage->UpdateGazeCandidates(Candidates);
+}
+
 bool ASomaPerceptionActor::CaptureViewport(TArray<uint8>& OutRGBPixels, int32& OutWidth, int32& OutHeight) const
 {
 	if (!GEngine || !GEngine->GameViewport || !GEngine->GameViewport->Viewport)
@@ -309,6 +366,14 @@ bool ASomaPerceptionActor::CaptureViewport(TArray<uint8>& OutRGBPixels, int32& O
 
 	const FIntPoint SizeXY = Viewport->GetSizeXY();
 	if (SizeXY.X <= 0 || SizeXY.Y <= 0)
+	{
+		return false;
+	}
+
+	// A window can exist before Metal has acquired its first drawable (notably
+	// during unattended startup). Wait for a valid render target instead of
+	// asking the RHI to read a null texture.
+	if (!Viewport->GetRenderTargetTexture().IsValid())
 	{
 		return false;
 	}
@@ -542,7 +607,11 @@ void ASomaPerceptionActor::StartListening()
 		CaptureBuffer.Reset();
 	}
 
-	AudioCapture.CloseStream();
+	if (!AudioCapture)
+	{
+		AudioCapture = MakeUnique<Audio::FAudioCapture>();
+	}
+	AudioCapture->CloseStream();
 
 	struct FCaptureAttempt
 	{
@@ -628,14 +697,14 @@ void ASomaPerceptionActor::StartListening()
 			Attempt.Encoding == Audio::EPCMAudioEncoding::FLOATING_POINT_32 ||
 			Attempt.Encoding == Audio::EPCMAudioEncoding::FLOATING_POINT_64;
 
-		bOpened = AudioCapture.OpenAudioCaptureStream(Params, OnAudio, 1024u);
+		bOpened = AudioCapture->OpenAudioCaptureStream(Params, OnAudio, 1024u);
 
 		if (bOpened)
 		{
 			break;
 		}
 
-		AudioCapture.CloseStream();
+		AudioCapture->CloseStream();
 	}
 
 	if (!bOpened)
@@ -644,10 +713,10 @@ void ASomaPerceptionActor::StartListening()
 		return;
 	}
 
-	const bool bStarted = AudioCapture.StartStream();
+	const bool bStarted = AudioCapture->StartStream();
 	if (!bStarted)
 	{
-		AudioCapture.CloseStream();
+		AudioCapture->CloseStream();
 		OnError.Broadcast(TEXT("Failed to start microphone capture."));
 		return;
 	}
@@ -664,10 +733,15 @@ void ASomaPerceptionActor::StopListening()
 		return;
 	}
 
-	const int32 CapturedSampleRate = AudioCapture.GetSampleRate() > 0 ? static_cast<int32>(AudioCapture.GetSampleRate()) : 16000;
+	if (!AudioCapture)
+	{
+		return;
+	}
 
-	AudioCapture.StopStream();
-	AudioCapture.CloseStream();
+	const int32 CapturedSampleRate = AudioCapture->GetSampleRate() > 0 ? static_cast<int32>(AudioCapture->GetSampleRate()) : 16000;
+
+	AudioCapture->StopStream();
+	AudioCapture->CloseStream();
 	bIsListening = false;
 	OnListeningStopped.Broadcast();
 

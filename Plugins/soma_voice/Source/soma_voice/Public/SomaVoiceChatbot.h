@@ -109,6 +109,30 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SomaVoice")
 	void SetMetaHumanAttachmentTarget(AActor* Target);
 
+	/**
+	 * Look up the viseme active at WorldTimeSeconds within the current utterance,
+	 * and also report the neighbouring entry so the caller can interpolate without
+	 * re-searching the timeline.
+	 *
+	 *  OutVisemeIndex / OutMidpointSeconds describe the entry whose
+	 *  [StartTime, EndTime) contains (WorldTimeSeconds - PlaybackStartTime).
+	 *  OutNextVisemeIndex / OutNextMidpointSeconds describe the following entry,
+	 *  or the same entry if we are already at the end of the timeline.
+	 *
+	 *  Midpoint values are returned in world-time seconds (offset by
+	 *  PlaybackStartTime) so callers can directly compare against the same
+	 *  WorldTimeSeconds reference frame they passed in.
+	 *
+	 *  Returns false if no utterance is in progress or the queried time is
+	 *  outside [first.StartTime, last.EndTime] of the timeline.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "SomaVoice")
+	bool GetVisemeAtWorldTime(float WorldTimeSeconds,
+		int32& OutVisemeIndex,
+		float& OutMidpointSeconds,
+		int32& OutNextVisemeIndex,
+		float& OutNextMidpointSeconds) const;
+
 	// ---- Delegates ----
 
 	UPROPERTY(BlueprintAssignable, Category = "SomaVoice|Events")

@@ -12,7 +12,13 @@ public class soma_storage : ModuleRules
 			"CoreUObject",
 			"Engine",
 			"Projects",
-			"DirectoryWatcher"
+			"Json",
+			"JsonUtilities"
 		});
+
+		if (Target.bBuildEditor)
+		{
+			PrivateDependencyModuleNames.Add("DirectoryWatcher");
+		}
 	}
 }
